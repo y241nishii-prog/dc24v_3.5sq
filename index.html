@@ -100,8 +100,10 @@
   const DROP_PER_M = 0.00044;
   const MAX_CIRCUITS = 4;
   const MAX_BRANCHES = 4;
+  const MAX_SUB_BRANCHES = 4; // サブ分岐の最大数
   const circuitsDiv = document.getElementById("circuits");
 
+  // --- 1. ラインの追加/削除/更新 (変更なし) ---
   function addCircuit() {
     if (circuitsDiv.children.length >= MAX_CIRCUITS) {
       alert("最大4ラインまで追加できます。");
@@ -118,6 +120,7 @@
       </p>
       <div class="branches"></div>
       <button class="add-btn" onclick="addBranch(this)">＋ 分岐追加</button>
+      <hr>
     `;
     circuitsDiv.appendChild(wrapper);
     updateCircuitNumbers();
@@ -135,13 +138,14 @@
         <button class='remove-btn' onclick='removeCircuit(this)'>ライン削除</button>`;
     });
   }
-
+  
+  // --- 2. 最上位分岐の追加/削除/更新 (HTML構造を変更) ---
   function addBranch(btn) {
     const branchesDiv = btn.parentNode.querySelector(".branches");
     const circuitIndex = Array.from(circuitsDiv.children).indexOf(btn.closest(".circuit")) + 1;
 
     if (branchesDiv.children.length >= MAX_BRANCHES) {
-      alert("分岐は最大4つまでです。");
+      alert("最上位の分岐は最大4つまでです。");
       return;
     }
 
@@ -151,13 +155,20 @@
       <h3>分岐 ${circuitIndex}-${branchesDiv.children.length + 1}
         <button class="remove-btn" onclick="removeBranch(this)">分岐削除</button>
       </h3>
-      <table>
-        <thead>
-          <tr><th>番号</th><th>名称・記号</th><th>消費電力(W)</th><th>コード長さ(m)</th><th>操作</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <button class="add-btn" onclick="addLamp(this)">＋ 照明追加</button>
+      <div class="branch-content" style="border: 1px dashed #007bff; padding: 10px; margin-top: 5px;">
+          <h4>▼ サブ分岐（２段階目）</h4>
+          <div class="sub-branches"></div>
+          <button class="add-btn" onclick="addSubBranch(this)">＋ サブ分岐追加</button>
+          
+          <h4 style="margin-top: 15px;">▼ この分岐に直接接続される照明</h4>
+          <table>
+            <thead>
+              <tr><th>番号</th><th>名称・記号</th><th>消費電力(W)</th><th>コード長さ(m)</th><th>操作</th></tr>
+            </thead>
+            <tbody class="direct-lamps"></tbody>
+          </table>
+          <button class="add-btn" onclick="addLamp(this)">＋ 照明追加</button>
+      </div>
     `;
     branchesDiv.appendChild(branchWrapper);
     updateBranchNumbers(branchesDiv, circuitIndex);
@@ -177,16 +188,48 @@
     });
   }
 
+  // --- 3. サブ分岐（２段階目）の追加/削除 (HTML構造を大幅変更) ---
+  function addSubBranch(btn) {
+      const subBranchesDiv = btn.parentNode.querySelector(".sub-branches");
+      const subBranchIndex = subBranchesDiv.children.length + 1;
+      
+      if (subBranchesDiv.children.length >= MAX_SUB_BRANCHES) {
+        alert("サブ分岐は最大4つまでです。");
+        return;
+      }
+
+      const subBranchWrapper = document.createElement("div");
+      subBranchWrapper.className = "sub-branch";
+      subBranchWrapper.style.marginLeft = "10px";
+      subBranchWrapper.style.padding = "5px";
+      subBranchWrapper.style.borderLeft = "3px solid #dc3545"; 
+      subBranchWrapper.style.marginBottom = "10px";
+      
+      subBranchWrapper.innerHTML = `
+        <h5 style="margin: 5px 0;">サブ分岐 ${subBranchIndex}
+          <button class="remove-btn" onclick="removeSubBranch(this)" style="font-size: 10px; padding: 2px 4px;">削除</button>
+        </h5>
+        <div class="sub-lamps-container">
+            <table>
+                <thead>
+                    <tr><th>番号</th><th>名称・記号</th><th>W(W)</th><th>コード長(m)</th><th>操作</th></tr>
+                </thead>
+                <tbody class="sub-lamps-tbody"></tbody>
+            </table>
+            <button class="add-btn" onclick="addLampToSubBranch(this)" style="font-size: 10px; padding: 3px 6px;">＋ 照明追加</button>
+        </div>
+      `;
+      subBranchesDiv.appendChild(subBranchWrapper);
+  }
+
+  function removeSubBranch(btn) {
+    btn.closest(".sub-branch").remove();
+  }
+
+  // --- 4. 照明の追加/削除/更新 (最上位分岐に直接接続される照明) ---
   function addLamp(btn) {
-    const tbody = btn.parentNode.querySelector("tbody");
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${tbody.children.length + 1}</td>
-      <td><input type="text" class="name" style="width:100px;"></td>
-      <td><input type="number" class="watt" min="0" step="0.1" value="0.0" style="width:70px;"></td>
-      <td><input type="number" class="len" min="0" step="0.1" value="0.0" style="width:70px;"></td>
-      <td><button class="remove-btn" onclick="removeLamp(this)">削除</button></td>
-    `;
+    const tbody = btn.closest(".branch-content").querySelector(".direct-lamps");
+    const tr = createLampRow(tbody.children.length + 1, 'removeLamp(this)');
     tbody.appendChild(tr);
     updateLampNumbers(tbody);
   }
@@ -197,12 +240,41 @@
     updateLampNumbers(tbody);
   }
 
+  // --- 5. ★サブ分岐に接続される照明の追加/削除★ (新規追加) ---
+  function addLampToSubBranch(btn) {
+    const tbody = btn.closest(".sub-lamps-container").querySelector(".sub-lamps-tbody");
+    const tr = createLampRow(tbody.children.length + 1, 'removeLampFromSubBranch(this)');
+    tbody.appendChild(tr);
+    updateLampNumbers(tbody);
+  }
+
+  function removeLampFromSubBranch(btn) {
+    const tbody = btn.closest("tbody");
+    btn.closest("tr").remove();
+    updateLampNumbers(tbody);
+  }
+
+  // --- 共通の行作成ヘルパー ---
+  function createLampRow(number, removeHandler) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${number}</td>
+        <td><input type="text" class="name" style="width:100px;"></td>
+        <td><input type="number" class="watt" min="0" step="0.1" value="0.0" style="width:50px;"></td>
+        <td><input type="number" class="len" min="0" step="0.1" value="0.0" style="width:50px;"></td>
+        <td><button class="remove-btn" onclick="${removeHandler}">削除</button></td>
+      `;
+      return tr;
+  }
+
+  // --- 共通の番号更新ヘルパー (変更なし) ---
   function updateLampNumbers(tbody) {
     tbody.querySelectorAll("tr").forEach((tr, i) => {
       tr.children[0].textContent = i + 1;
     });
   }
 
+  // --- 6. 計算ロジック (calc) の修正 ---
   function calc() {
     const transformer = parseFloat(document.getElementById("transformer").value);
     const MAX_DROP = 2.0; // 許容電圧降下
@@ -221,51 +293,96 @@
       
       // ライン全体の合計W数を計算 (トランスから分岐点までの計算に使用)
       branches.forEach(b => {
-          b.querySelectorAll("tbody tr").forEach(r => {
+          // 最上位分岐に直接接続の照明W数
+          b.querySelector(".direct-lamps").querySelectorAll("tr").forEach(r => {
               const w = parseFloat(r.querySelector(".watt").value) || 0;
               circuitTotalW += w;
+          });
+          // サブ分岐内の照明W数
+          b.querySelectorAll(".sub-branch").forEach(sb => {
+              sb.querySelectorAll(".sub-lamps-tbody tr").forEach(r => {
+                  const w = parseFloat(r.querySelector(".watt").value) || 0;
+                  circuitTotalW += w;
+              });
           });
       });
       totalW += circuitTotalW;
 
-      // 1. トランスから分岐点までの電圧降下 (e)
+      // 1. トランスから最上位の分岐点までの電圧降下 (e)
       const lenToBranchInput = c.querySelector(".len-to-branch");
       const lenToBranch = parseFloat(lenToBranchInput.value) || 0;
       
-      // トランスから分岐点までの電圧降下 e = 消費電力合計 * コード長さ * DROP_PER_M
+      // 電圧降下 e = ライン消費電力合計 * 幹線長さ * DROP_PER_M
       const dropE1 = circuitTotalW * lenToBranch * DROP_PER_M;
       
       circuitHtml += `<p>
         <b>ライン${cIdx + 1} 消費電力合計:</b> ${circuitTotalW.toFixed(1)} W<br>
-        <b>トランス〜分岐点までの電圧降下 (e):</b> ${circuitTotalW.toFixed(1)} W × ${lenToBranch.toFixed(1)} m × ${DROP_PER_M} V/W・m = <b>${dropE1.toFixed(3)} V</b>
+        <b>トランス〜最上位分岐点までの降下 (e):</b> ${circuitTotalW.toFixed(1)} W × ${lenToBranch.toFixed(1)} m × ${DROP_PER_M} V/W・m = <b>${dropE1.toFixed(3)} V</b>
       </p>`;
 
       branches.forEach((b, bIdx) => {
-        let branchW = 0;
-        let branchLen = 0;
-        const rows = b.querySelectorAll("tbody tr");
-        
-        // 分岐ごとのW合計と長さ合計を算出
-        rows.forEach((r) => {
+        let branchTotalW = 0; // 最上位分岐に接続される全てのW (直接接続照明 + サブ分岐内の全照明)
+        let branchTotalLen = 0; // 最上位分岐点以降のコード長さ合計
+
+        // --- A. 直接接続の照明のWとLenを算出 ---
+        const directLamps = b.querySelector(".direct-lamps").querySelectorAll("tr");
+        let directLampRows = "";
+        directLamps.forEach((r, idx) => {
           const w = parseFloat(r.querySelector(".watt").value) || 0;
           const len = parseFloat(r.querySelector(".len").value) || 0; 
-          branchW += w;
-          branchLen = Math.max(branchLen, len); // この分岐内の最長距離（元のロジックが「分岐点からの長さ」なので、最大値を採用）
+          branchTotalW += w;
+          branchTotalLen += len; 
+          
+          directLampRows += `
+            <tr>
+              <td>${idx + 1}</td>
+              <td>${r.querySelector(".name").value || "-"}</td>
+              <td>${w.toFixed(1)}</td>
+              <td>${len.toFixed(1)}</td>
+              <td>-</td>
+            </tr>`;
         });
         
-        // 2. 分岐点以降の電圧降下 (e_n) - ★ご要望の計算ロジックを適用★
-        // e_n = 分岐内の合計W数 * 分岐内のコード最長距離 * DROP_PER_M
-        // ※ ご要望の「コードの合計」を正確に反映するため、一旦「最長距離」ではなく単純な「合計長さ」で計算します。
-        //    しかし、各行のlenが「分岐点からの長さ」であるため、**この分岐内の最長距離**をコード長として採用する方が、配線構造として現実的です。
-        //    もし「コードの合計」が必要な場合は、全行のlenを加算するように修正してください。
+        // --- B. サブ分岐内の照明のWとLenを合算 ---
+        const subBranches = b.querySelectorAll(".sub-branch");
+        let subBranchHtml = "";
+        subBranches.forEach((sb, idx) => {
+            let subBranchW = 0;
+            let subBranchLen = 0;
+            let subLampRows = "";
 
-        // **今回はご要望の「コードの合計」に則り、全照明のlenを合計します。** (lenが分岐点からの長さの場合、これは物理的意味を持ちません)
-        let totalLenOfBranch = 0;
-        rows.forEach(r => {
-            totalLenOfBranch += parseFloat(r.querySelector(".len").value) || 0;
+            sb.querySelectorAll(".sub-lamps-tbody tr").forEach((r, lampIdx) => {
+                const w = parseFloat(r.querySelector(".watt").value) || 0;
+                const len = parseFloat(r.querySelector(".len").value) || 0;
+                subBranchW += w;
+                subBranchLen += len; 
+                
+                subLampRows += `
+                    <tr>
+                        <td>${lampIdx + 1}</td>
+                        <td>${r.querySelector(".name").value || "-"}</td>
+                        <td>${w.toFixed(1)}</td>
+                        <td>${len.toFixed(1)}</td>
+                        <td>-</td>
+                    </tr>`;
+            });
+
+            branchTotalW += subBranchW; // 最上位分岐の合計Wに加算
+            branchTotalLen += subBranchLen; // 最上位分岐の合計Lenに加算
+            
+            subBranchHtml += `
+              <h5 style="margin-top: 10px;">サブ分岐 ${idx + 1} の照明 (${subBranchW.toFixed(1)}W / ${subBranchLen.toFixed(1)}m)</h5>
+              <table>
+                <thead><tr><th>番号</th><th>品名</th><th>W(W)</th><th>コード長(m)</th></tr></thead>
+                <tbody>${subLampRows}</tbody>
+              </table>
+            `;
         });
 
-        const dropE2 = branchW * totalLenOfBranch * DROP_PER_M;
+
+        // 3. 最上位分岐点以降の電圧降下 (e_n)
+        // e_n = (合計W) × (合計コード長さ) × DROP_PER_M
+        const dropE2 = branchTotalW * branchTotalLen * DROP_PER_M;
         
         // 電圧降下合計 = e + e_n (この分岐の最大降下)
         const totalDrop = dropE1 + dropE2;
@@ -273,44 +390,27 @@
         // このラインの最大降下を更新
         circuitMaxDrop = Math.max(circuitMaxDrop, totalDrop);
 
-        // 結果テーブルの行データを作成
-        let branchRows = "";
-        rows.forEach((r, idx) => {
-            const name = r.querySelector(".name").value || "-";
-            const w = parseFloat(r.querySelector(".watt").value) || 0;
-            const len = parseFloat(r.querySelector(".len").value) || 0;
-            // 個々の照明の降下ではなく、分岐全体の降下値のみを表示
-            branchRows += `
-              <tr>
-                <td>${idx + 1}</td>
-                <td>${name}</td>
-                <td>${w.toFixed(1)}</td>
-                <td>${len.toFixed(1)}</td>
-              </tr>`;
-        });
-        
-        // 3. 分岐ごとの小計
+        // 結果出力
         const dropClass = totalDrop > MAX_DROP ? "warning" : "";
-
-        // 分岐番号に応じた変数名 (e1, e2, e3, ...) を動的に作成
-        const branchDropName = `e${bIdx + 1}`;
+        const branchDropName = `e${bIdx + 1}`; 
 
         circuitHtml += `
           <h4>分岐 ${cIdx + 1}-${bIdx + 1}</h4>
+          ${subBranchHtml}
+          <h5>直接接続照明</h5>
           <table>
             <thead>
-              <tr><th>番号</th><th>品名・名称</th><th>W数</th><th>コード長さ(m)</th></tr>
+              <tr><th>番号</th><th>品名・名称</th><th>W数</th><th>コード長さ(m)</th><th>操作</th></tr>
             </thead>
-            <tbody>
-              ${branchRows}
-            </tbody>
+            <tbody>${directLampRows}</tbody>
           </table>
           <p>
-            <b>分岐 ${cIdx + 1}-${bIdx + 1} 小計:</b> ${branchW.toFixed(1)} W<br>
-            <b>分岐内のコード長さ合計:</b> ${totalLenOfBranch.toFixed(1)} m<br>
-            <b>分岐内の電圧降下 (${branchDropName}):</b> ${branchW.toFixed(1)} W × ${totalLenOfBranch.toFixed(1)} m × ${DROP_PER_M} V/W・m = <b>${dropE2.toFixed(3)} V</b><br>
-            <b>電圧降下合計 (e+ ${branchDropName}):</b> ${dropE1.toFixed(3)} V + ${dropE2.toFixed(3)} V = <span class="${dropClass}"><b>${totalDrop.toFixed(3)} V</b></span>
+            <b>分岐 ${cIdx + 1}-${bIdx + 1} 合計:</b> ${branchTotalW.toFixed(1)} W (全照明の合計)<br>
+            <b>分岐点以降のコード長さ合計:</b> ${branchTotalLen.toFixed(1)} m<br>
+            <b>分岐点以降の降下 (${branchDropName}):</b> ${branchTotalW.toFixed(1)} W × ${branchTotalLen.toFixed(1)} m × ${DROP_PER_M} V/W・m = <b>${dropE2.toFixed(3)} V</b><br>
+            <b>最終電圧降下合計 (e+ ${branchDropName}):</b> ${dropE1.toFixed(3)} V + ${dropE2.toFixed(3)} V = <span class="${dropClass}"><b>${totalDrop.toFixed(3)} V</b></span>
           </p>
+          <hr>
         `;
       });
       
@@ -326,7 +426,7 @@
       `;
 
       if (circuitMaxDrop > MAX_DROP) {
-        overallWarning = `<p class="warning">⚠ 許容電圧降下（${MAX_DROP}V）を超えているラインがあります！</p>`;
+        overallWarning += `<p class="warning">⚠ ライン ${cIdx + 1} が許容電圧降下（${MAX_DROP}V）を超えています！</p>`;
       }
       
       lineResults += circuitHtml;
@@ -340,6 +440,7 @@
     document.getElementById("result").innerHTML = overallResult + overallWarning + lineResults;
   }
 
+  // --- 7. 印刷処理 (変更なし) ---
   function preparePrint() {
     const project = document.getElementById("projectName").value || "未入力";
     const creator = document.getElementById("creator").value || "未入力";

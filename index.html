@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>V_Drop Checker[DC24V_3.5sq]</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; background: #fafafa; }
+  header { display: flex; align-items: center; margin-bottom: 10px; }
+  header img { height: 50px; margin-right: 15px; }
+  header h1 { font-size: 22px; margin: 0; }
+
+  #conditions, #projectInfo {
+    background: #eef5ff;
+    padding: 10px 15px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+  }
+
+  input[type=text] { width: 200px; margin-left: 10px; }
+
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; background: #fff; }
+  th, td { border: 1px solid #ccc; padding: 6px; text-align: left; font-size: 13px; }
+  th { background: #eee; }
+  .warning { color: red; font-weight: bold; }
+
+  button { padding: 6px 10px; border: none; color: white; border-radius: 6px; cursor: pointer; margin: 4px; }
+  .add-btn { background-color: #007bff; }
+  .remove-btn { background-color: #dc3545; }
+  .calc-btn { background-color: #198754; }
+  .print-btn { background-color: #6c757d; }
+  button:hover { opacity: 0.85; }
+
+  @page { size: A4 portrait; margin: 15mm; }
+  @media print {
+    button, header, #circuits, #conditions, #projectInfo { display: none !important; }
+    #printHeader {
+      display: block !important;
+      position: fixed; 
+      top: 0; 
+      left: 0; 
+      width: 100%;
+      background: white;
+      border-bottom: 2px solid #ccc;
+      padding: 5px 15px;
+    }
+    #result { margin-top: 130px; }
+  }
+  #printHeader { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="miraria.png" alt="ロゴ">
+  <h1>V_Drop Checker[DC24V_3.5sq]</h1>
+</header>
+
+<div id="projectInfo">
+  <strong>■ 物件情報</strong><br>
+  物件名：<input type="text" id="projectName" placeholder="例：○○邸 外構照明計画"><br>
+  作成担当者：<input type="text" id="creator" placeholder="例：三協 太郎">
+</div>
+
+<div id="conditions">
+  <strong>■ 条件設定</strong><br>
+  トランス電圧：<b>DC24V</b>　
+  電源コード：<b>9.5mmコード(3.5sq)</b>　
+  電圧降下量：<b>0.00044 V/W･m</b>　　
+  許容電圧降下：<b>2.0V</b><br>
+  トランス容量：
+  <select id="transformer">
+    <option value="35">35W</option>
+    <option value="75">75W</option>
+  </select>
+</div>
+
+<div id="printHeader">
+  <img src="三協アルミ_4C透過.png" alt="ロゴ" style="height:35px; vertical-align:middle; margin-right:10px;">
+  <img src="miraria.png" alt="ロゴ" style="height:35px; vertical-align:middle; margin-right:10px;">
+  <span style="font-size:18px; font-weight:bold;">DC24V V_Drop Checker</span><br>
+  <small id="printConditions"></small><br>
+  <small id="printProjectInfo"></small>
+</div>
+
+<div>
+  <button class="add-btn" onclick="addCircuit()">＋ ライン追加</button>
+</div>
+
+<div id="circuits"></div>
+
+<div>
+  <button class="calc-btn" onclick="calc()">計算する</button>
+  <button class="print-btn" onclick="preparePrint()">印刷（PDF保存可）</button>
+</div>
+
+<div id="result"></div>
+
+<script>
+  const DROP_PER_M = 0.00044;
+  const MAX_CIRCUITS = 4;
+  const MAX_BRANCHES = 4;
+  const circuitsDiv = document.getElementById("circuits");
+
+  function addCircuit() {
+    if (circuitsDiv.children.length >= MAX_CIRCUITS) {
+      alert("最大4ラインまで追加できます。");
+      return;
+    }
+    const wrapper = document.createElement("div");
+    wrapper.className = "circuit";
+    wrapper.innerHTML = `
+      <h2>ライン ${circuitsDiv.children.length + 1}
+        <button class="remove-btn" onclick="removeCircuit(this)">ライン削除</button>
+      </h2>
+      <p>トランス〜分岐点までの長さ(m)：
+        <input type="number" class="len-to-branch" min="0" step="0.1" value="0" style="width:70px;">
+      </p>
+      <div class="branches"></div>
+      <button class="add-btn" onclick="addBranch(this)">＋ 分岐追加</button>
+    `;
+    circuitsDiv.appendChild(wrapper);
+    updateCircuitNumbers();
+  }
+
+  function removeCircuit(btn) {
+    btn.closest(".circuit").remove();
+    updateCircuitNumbers();
+  }
+
+  function updateCircuitNumbers() {
+    document.querySelectorAll(".circuit").forEach((c, idx) => {
+      const h2 = c.querySelector("h2");
+      h2.innerHTML = `ライン ${idx + 1}
+        <button class='remove-btn' onclick='removeCircuit(this)'>ライン削除</button>`;
+    });
+  }
+
+  function addBranch(btn) {
+    const branchesDiv = btn.parentNode.querySelector(".branches");
+    const circuitIndex = Array.from(circuitsDiv.children).indexOf(btn.closest(".circuit")) + 1;
+
+    if (branchesDiv.children.length >= MAX_BRANCHES) {
+      alert("分岐は最大4つまでです。");
+      return;
+    }
+
+    const branchWrapper = document.createElement("div");
+    branchWrapper.className = "branch";
+    branchWrapper.innerHTML = `
+      <h3>分岐 ${circuitIndex}-${branchesDiv.children.length + 1}
+        <button class="remove-btn" onclick="removeBranch(this)">分岐削除</button>
+      </h3>
+      <table>
+        <thead>
+          <tr><th>番号</th><th>名称・記号</th><th>消費電力(W)</th><th>コード長さ(m)</th><th>操作</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button class="add-btn" onclick="addLamp(this)">＋ 照明追加</button>
+    `;
+    branchesDiv.appendChild(branchWrapper);
+    updateBranchNumbers(branchesDiv, circuitIndex);
+  }
+
+  function removeBranch(btn) {
+    const branchesDiv = btn.closest(".branches");
+    const circuitIndex = Array.from(circuitsDiv.children).indexOf(btn.closest(".circuit")) + 1;
+    btn.closest(".branch").remove();
+    updateBranchNumbers(branchesDiv, circuitIndex);
+  }
+
+  function updateBranchNumbers(branchesDiv, circuitIndex) {
+    branchesDiv.querySelectorAll(".branch").forEach((b, idx) => {
+      b.querySelector("h3").innerHTML = `分岐 ${circuitIndex}-${idx + 1}
+        <button class='remove-btn' onclick='removeBranch(this)'>分岐削除</button>`;
+    });
+  }
+
+  function addLamp(btn) {
+    const tbody = btn.parentNode.querySelector("tbody");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${tbody.children.length + 1}</td>
+      <td><input type="text" class="name" style="width:100px;"></td>
+      <td><input type="number" class="watt" min="0" step="0.1" value="0.0" style="width:70px;"></td>
+      <td><input type="number" class="len" min="0" step="0.1" value="0.0" style="width:70px;"></td>
+      <td><button class="remove-btn" onclick="removeLamp(this)">削除</button></td>
+    `;
+    tbody.appendChild(tr);
+    updateLampNumbers(tbody);
+  }
+
+  function removeLamp(btn) {
+    const tbody = btn.closest("tbody");
+    btn.closest("tr").remove();
+    updateLampNumbers(tbody);
+  }
+
+  function updateLampNumbers(tbody) {
+    tbody.querySelectorAll("tr").forEach((tr, i) => {
+      tr.children[0].textContent = i + 1;
+    });
+  }
+
+  function calc() {
+    const transformer = parseFloat(document.getElementById("transformer").value);
+    const MAX_DROP = 2.0; // 許容電圧降下
+    let totalW = 0;
+    let lineResults = "";
+    let overallResult = "<h2>計算結果</h2>";
+    let overallWarning = "";
+
+    const circuits = document.querySelectorAll(".circuit");
+
+    circuits.forEach((c, cIdx) => {
+      let circuitTotalW = 0;
+      let circuitMaxDrop = 0;
+      let circuitHtml = `<h3>ライン ${cIdx + 1}</h3>`;
+      const branches = c.querySelectorAll(".branch");
+      
+      // ライン全体の合計W数を計算 (トランスから分岐点までの計算に使用)
+      branches.forEach(b => {
+          b.querySelectorAll("tbody tr").forEach(r => {
+              const w = parseFloat(r.querySelector(".watt").value) || 0;
+              circuitTotalW += w;
+          });
+      });
+      totalW += circuitTotalW;
+
+      // 1. トランスから分岐点までの電圧降下 (e)
+      const lenToBranchInput = c.querySelector(".len-to-branch");
+      const lenToBranch = parseFloat(lenToBranchInput.value) || 0;
+      
+      // トランスから分岐点までの電圧降下 e = 消費電力合計 * コード長さ * DROP_PER_M
+      const dropE1 = circuitTotalW * lenToBranch * DROP_PER_M;
+      
+      circuitHtml += `<p>
+        <b>ライン${cIdx + 1} 消費電力合計:</b> ${circuitTotalW.toFixed(1)} W<br>
+        <b>トランス〜分岐点までの電圧降下 (e):</b> ${circuitTotalW.toFixed(1)} W × ${lenToBranch.toFixed(1)} m × ${DROP_PER_M} V/W・m = <b>${dropE1.toFixed(3)} V</b>
+      </p>`;
+
+      branches.forEach((b, bIdx) => {
+        let branchW = 0;
+        let branchLen = 0;
+        const rows = b.querySelectorAll("tbody tr");
+        
+        // 分岐ごとのW合計と長さ合計を算出
+        rows.forEach((r) => {
+          const w = parseFloat(r.querySelector(".watt").value) || 0;
+          const len = parseFloat(r.querySelector(".len").value) || 0; 
+          branchW += w;
+          branchLen = Math.max(branchLen, len); // この分岐内の最長距離（元のロジックが「分岐点からの長さ」なので、最大値を採用）
+        });
+        
+        // 2. 分岐点以降の電圧降下 (e_n) - ★ご要望の計算ロジックを適用★
+        // e_n = 分岐内の合計W数 * 分岐内のコード最長距離 * DROP_PER_M
+        // ※ ご要望の「コードの合計」を正確に反映するため、一旦「最長距離」ではなく単純な「合計長さ」で計算します。
+        //    しかし、各行のlenが「分岐点からの長さ」であるため、**この分岐内の最長距離**をコード長として採用する方が、配線構造として現実的です。
+        //    もし「コードの合計」が必要な場合は、全行のlenを加算するように修正してください。
+
+        // **今回はご要望の「コードの合計」に則り、全照明のlenを合計します。** (lenが分岐点からの長さの場合、これは物理的意味を持ちません)
+        let totalLenOfBranch = 0;
+        rows.forEach(r => {
+            totalLenOfBranch += parseFloat(r.querySelector(".len").value) || 0;
+        });
+
+        const dropE2 = branchW * totalLenOfBranch * DROP_PER_M;
+        
+        // 電圧降下合計 = e + e_n (この分岐の最大降下)
+        const totalDrop = dropE1 + dropE2;
+        
+        // このラインの最大降下を更新
+        circuitMaxDrop = Math.max(circuitMaxDrop, totalDrop);
+
+        // 結果テーブルの行データを作成
+        let branchRows = "";
+        rows.forEach((r, idx) => {
+            const name = r.querySelector(".name").value || "-";
+            const w = parseFloat(r.querySelector(".watt").value) || 0;
+            const len = parseFloat(r.querySelector(".len").value) || 0;
+            // 個々の照明の降下ではなく、分岐全体の降下値のみを表示
+            branchRows += `
+              <tr>
+                <td>${idx + 1}</td>
+                <td>${name}</td>
+                <td>${w.toFixed(1)}</td>
+                <td>${len.toFixed(1)}</td>
+              </tr>`;
+        });
+        
+        // 3. 分岐ごとの小計
+        const dropClass = totalDrop > MAX_DROP ? "warning" : "";
+
+        // 分岐番号に応じた変数名 (e1, e2, e3, ...) を動的に作成
+        const branchDropName = `e${bIdx + 1}`;
+
+        circuitHtml += `
+          <h4>分岐 ${cIdx + 1}-${bIdx + 1}</h4>
+          <table>
+            <thead>
+              <tr><th>番号</th><th>品名・名称</th><th>W数</th><th>コード長さ(m)</th></tr>
+            </thead>
+            <tbody>
+              ${branchRows}
+            </tbody>
+          </table>
+          <p>
+            <b>分岐 ${cIdx + 1}-${bIdx + 1} 小計:</b> ${branchW.toFixed(1)} W<br>
+            <b>分岐内のコード長さ合計:</b> ${totalLenOfBranch.toFixed(1)} m<br>
+            <b>分岐内の電圧降下 (${branchDropName}):</b> ${branchW.toFixed(1)} W × ${totalLenOfBranch.toFixed(1)} m × ${DROP_PER_M} V/W・m = <b>${dropE2.toFixed(3)} V</b><br>
+            <b>電圧降下合計 (e+ ${branchDropName}):</b> ${dropE1.toFixed(3)} V + ${dropE2.toFixed(3)} V = <span class="${dropClass}"><b>${totalDrop.toFixed(3)} V</b></span>
+          </p>
+        `;
+      });
+      
+      // ライン全体の最大電圧降下
+      const dropClassMax = circuitMaxDrop > MAX_DROP ? "warning" : "";
+      circuitHtml += `
+        <p>
+          <b>ライン${cIdx + 1} 全体の最大電圧降下:</b> 
+          <span class="${dropClassMax}">${circuitMaxDrop.toFixed(3)} V</span> 
+          (許容 ${MAX_DROP} V)
+        </p>
+        <hr>
+      `;
+
+      if (circuitMaxDrop > MAX_DROP) {
+        overallWarning = `<p class="warning">⚠ 許容電圧降下（${MAX_DROP}V）を超えているラインがあります！</p>`;
+      }
+      
+      lineResults += circuitHtml;
+    });
+
+    overallResult += `<p><b>消費電力合計 (全ライン):</b> ${totalW.toFixed(1)} W</p>`;
+    if (totalW > transformer) {
+      overallWarning += `<p class="warning">⚠ トランス容量（${transformer}W）を超えています！</p>`;
+    }
+
+    document.getElementById("result").innerHTML = overallResult + overallWarning + lineResults;
+  }
+
+  function preparePrint() {
+    const project = document.getElementById("projectName").value || "未入力";
+    const creator = document.getElementById("creator").value || "未入力";
+    const transformer = document.getElementById("transformer").value;
+    document.getElementById("printConditions").innerText =
+      `トランス電圧：DC24V　|電源コード：9.5mmコード(3.5sq)　|　電圧降下量：0.00044V/W･m　|　許容電圧降下：2.0V　|　トランス容量：${transformer}W`;
+    document.getElementById("printProjectInfo").innerText =
+      `物件名：${project}　|　作成担当者：${creator}  |　作成日: ${new Date().toLocaleDateString()}`;
+    window.print();
+  }
+</script>
+</body>
+</html>

@@ -108,7 +108,7 @@
 <div id="result"></div>
 
 <script>
-  const DROP_PER_M = 0.00126;
+  const DROP_PER_M = 0.00044;
   const MAX_CIRCUITS = 4;
   const MAX_BRANCHES = 4;
   const MAX_SUB_BRANCHES = 4; // サブ分岐の最大数
@@ -167,11 +167,8 @@
         <button class="remove-btn" onclick="removeBranch(this)">分岐削除</button>
       </h3>
       <div class="branch-content" style="border: 1px dashed #007bff; padding: 10px; margin-top: 5px;">
-          <h4>▼ サブ分岐（２段階目）</h4>
-          <div class="sub-branches"></div>
-          <button class="add-btn" onclick="addSubBranch(this)">＋ サブ分岐追加</button>
           
-          <h4 style="margin-top: 15px;">▼ この分岐に直接接続される照明</h4>
+          <h4 style="margin-top: 0px;">▼ この分岐に直接接続される照明</h4>
           <table>
             <thead>
               <tr><th>番号</th><th>名称・記号</th><th>消費電力(W)</th><th>コード長さ(m)</th><th>操作</th></tr>
@@ -179,6 +176,11 @@
             <tbody class="direct-lamps"></tbody>
           </table>
           <button class="add-btn" onclick="addLamp(this)">＋ 照明追加</button>
+
+          <h4 style="margin-top: 15px;">▼ サブ分岐（２段階目）</h4>
+          <div class="sub-branches"></div>
+          <button class="add-btn" onclick="addSubBranch(this)">＋ サブ分岐追加</button>
+          
       </div>
     `;
     branchesDiv.appendChild(branchWrapper);
@@ -400,9 +402,10 @@
         const dropClass = totalDrop > MAX_DROP ? "warning" : "";
         const branchDropName = `e${bIdx + 1}`; 
 
+        // 構造変更に合わせてHTML出力の順番も調整
         circuitHtml += `
           <h4>分岐 ${cIdx + 1}-${bIdx + 1}</h4>
-          ${subBranchHtml}
+          
           <h5>直接接続照明</h5>
           <table>
             <thead>
@@ -410,6 +413,9 @@
             </thead>
             <tbody>${directLampRows}</tbody>
           </table>
+
+          ${subBranchHtml}
+
           <p>
             <b>分岐 ${cIdx + 1}-${bIdx + 1} 合計:</b> ${branchTotalW.toFixed(1)} W (全照明の合計)<br>
             <b>分岐点以降のコード長さ合計:</b> ${branchTotalLen.toFixed(1)} m<br>
